@@ -4,6 +4,24 @@
 
 @layer components {
   .btn {
-    @apply rounded-md bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600;
+    @apply rounded-md bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600 disabled:bg-emerald-300 transition-all duration-150 ease-in;
   }
+}
+
+/* Styled Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
