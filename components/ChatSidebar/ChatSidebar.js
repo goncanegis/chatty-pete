@@ -1,3 +1,9 @@
+import Link from "next/link";
+
 export const ChatSidebar = () => {
-  return <aside>chat sidebar</aside>;
+  return (
+    <aside className="bg-gray-900 text-white">
+      <Link href="/api/auth/logout">Logout</Link>
+    </aside>
+  );
 };
