@@ -1,15 +1,34 @@
 import { ChatSidebar } from "components/ChatSidebar";
 import Head from "next/head";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { streamReader } from "openai-edge-stream";
 import { v4 as uuid } from "uuid";
 import { Message } from "components/Message";
+import { useRouter } from "next/router";
+import { getSession } from "@auth0/nextjs-auth0";
+import clientPromise from "lib/mongodb";
+import { ObjectId } from "mongodb";
 
-export default function ChatPage() {
+export default function ChatPage({ chatId, title, messages = [] }) {
   const [incomingMessage, setIncomingMessage] = useState("");
   const [messageText, setMessageText] = useState("");
   const [newChatMessages, setNewChatMessages] = useState([]);
   const [generatingResponse, setGeneratingResponse] = useState(false);
+  const [newChatId, setNewChatId] = useState(null);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    setNewChatMessages([]);
+    setNewChatId(null);
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!generatingResponse && newChatId) {
+      setNewChatId(null);
+      router.push(`/chat/${newChatId}`);
+    }
+  }, [newChatId, generatingResponse, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,7 +49,7 @@ export default function ChatPage() {
 
     setMessageText("");
 
-    const response = await fetch(`api/chat/createNewChat`, {
+    const response = await fetch(`/api/chat/sendMessage`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -40,31 +59,24 @@ export default function ChatPage() {
       }),
     });
 
-    const json = await response.json();
+    const data = response.body;
+    if (!data) return;
 
-    console.log("new chat json: ", json);
+    const reader = data.getReader();
+    await streamReader(reader, (message) => {
+      console.log("message: ", message);
+      if (message.event === "newChatId") {
+        setNewChatId(message.content);
+      } else {
+        setIncomingMessage((s) => `${s}${message.content}`);
+      }
+    });
 
-    // const response = await fetch(`api/chat/sendMessage`, {
-    //   method: "POST",
-    //   headers: {
-    //     "content-type": "application/json",
-    //   },
-    //   body: JSON.stringify({
-    //     message: messageText,
-    //   }),
-    // });
-    //
-    // const data = response.body;
-    // if (!data) return;
-
-    // const reader = data.getReader();
-    // await streamReader(reader, (message) => {
-    //   console.log("message: ", message);
-    //   setIncomingMessage((s) => `${s}${message.content}`);
-    // });
-
+    setIncomingMessage("");
     setGeneratingResponse(false);
   };
+
+  const allMessages = [...messages, ...newChatMessages];
 
   return (
     <>
@@ -73,10 +85,10 @@ export default function ChatPage() {
       </Head>
 
       <div className="grid h-screen grid-cols-[260px_1fr]">
-        <ChatSidebar />
+        <ChatSidebar chatId={chatId} />
         <div className="flex flex-col bg-gray-700 overflow-hidden">
           <div className="flex-1 text-white overflow-y-scroll">
-            {newChatMessages.map((message) => (
+            {allMessages.map((message) => (
               <Message
                 key={message._id}
                 role={message.role}
@@ -110,3 +122,29 @@ export default function ChatPage() {
     </>
   );
 }
+
+export const getServerSideProps = async (ctx) => {
+  const chatId = ctx.params?.chatId?.[0] || null;
+  if (chatId) {
+    const { user } = await getSession(ctx.req, ctx.res);
+    const client = await clientPromise;
+    const db = client.db("ChattyPete");
+    const chat = await db
+      .collection("chats")
+      .findOne({ userId: user.sub, _id: new ObjectId(chatId) });
+
+    return {
+      props: {
+        chatId,
+        title: chat.title,
+        messages: chat.messages.map((message) => ({
+          ...message,
+          _id: uuid(),
+        })),
+      },
+    };
+  }
+  return {
+    props: {},
+  };
+};
