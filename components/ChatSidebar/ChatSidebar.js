@@ -25,7 +25,7 @@ export const ChatSidebar = ({ chatId }) => {
   }, [chatId]);
 
   return (
-    <aside className="bg-gray-900 text-white flex flex-col overflow-hidden">
+    <aside className="bg-gray-900 text-white flex flex-col overflow-hidden transition-all duration-150 ease-in">
       <Link
         href="/chat"
         className="side-menu-item bg-emerald-500 hover:bg-emerald-600"
