@@ -15,14 +15,35 @@ export default function ChatPage({ chatId, title, messages = [] }) {
   const [newChatMessages, setNewChatMessages] = useState([]);
   const [generatingResponse, setGeneratingResponse] = useState(false);
   const [newChatId, setNewChatId] = useState(null);
+  const [fullMessage, setFullMessage] = useState("");
+  const [originalChatId, setOriginalChatId] = useState(chatId);
 
   const router = useRouter();
 
+  const routeHasChanged = chatId !== originalChatId;
+
+  // When our route changes, we want to reset the new chat messages
   useEffect(() => {
     setNewChatMessages([]);
     setNewChatId(null);
   }, [chatId]);
 
+  // Save the newly streamed message to new chat messages
+  useEffect(() => {
+    if (!routeHasChanged && !generatingResponse && fullMessage) {
+      setNewChatMessages((prev) => [
+        ...prev,
+        {
+          _id: uuid(),
+          role: "assistant",
+          content: fullMessage,
+        },
+      ]);
+      setFullMessage("");
+    }
+  }, [generatingResponse, fullMessage, routeHasChanged]);
+
+  // When we get a new chat id, we want to redirect to that chat
   useEffect(() => {
     if (!generatingResponse && newChatId) {
       setNewChatId(null);
@@ -34,6 +55,7 @@ export default function ChatPage({ chatId, title, messages = [] }) {
     e.preventDefault();
 
     setGeneratingResponse(true);
+    setOriginalChatId(chatId);
 
     setNewChatMessages((prev) => {
       const newChatMessages = [
@@ -55,6 +77,7 @@ export default function ChatPage({ chatId, title, messages = [] }) {
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        chatId,
         message: messageText,
       }),
     });
@@ -63,15 +86,18 @@ export default function ChatPage({ chatId, title, messages = [] }) {
     if (!data) return;
 
     const reader = data.getReader();
+    let content = "";
     await streamReader(reader, (message) => {
       console.log("message: ", message);
       if (message.event === "newChatId") {
         setNewChatId(message.content);
       } else {
         setIncomingMessage((s) => `${s}${message.content}`);
+        content = content + message.content;
       }
     });
 
+    setFullMessage(content);
     setIncomingMessage("");
     setGeneratingResponse(false);
   };
@@ -87,18 +113,26 @@ export default function ChatPage({ chatId, title, messages = [] }) {
       <div className="grid h-screen grid-cols-[260px_1fr]">
         <ChatSidebar chatId={chatId} />
         <div className="flex flex-col bg-gray-700 overflow-hidden">
-          <div className="flex-1 text-white overflow-y-scroll">
-            {allMessages.map((message) => (
-              <Message
-                key={message._id}
-                role={message.role}
-                content={message.content}
-              />
-            ))}
+          <div className="flex-1 flex flex-col-reverse text-white overflow-y-scroll">
+            <div className="mb-auto">
+              {allMessages.map((message) => (
+                <Message
+                  key={message._id}
+                  role={message.role}
+                  content={message.content}
+                />
+              ))}
 
-            {!!incomingMessage && (
-              <Message role="assistant" content={incomingMessage} />
-            )}
+              {!!incomingMessage && !routeHasChanged && (
+                <Message role="assistant" content={incomingMessage} />
+              )}
+              {!!incomingMessage && routeHasChanged && (
+                <Message
+                  role="notice"
+                  content="Only one message at a time. Please allow any other responses to complete before sending another message"
+                />
+              )}
+            </div>
           </div>
           <footer className="bg-gray-800 p-10">
             <form onSubmit={handleSubmit}>
